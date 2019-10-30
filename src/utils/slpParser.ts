@@ -2,7 +2,9 @@ import _ from "lodash";
 import semver from 'semver';
 
 import { PostFrameUpdateType, GameStartType, GameEndType, Command, PreFrameUpdateType } from "./slpReader";
-import { Stats, FramesType, FrameEntryType, Frames, PlayerIndexedType, getSinglesPlayerPermutationsFromSettings } from "../stats";
+import {
+  Stats, FramesType, FrameEntryType, Frames, PlayerIndexedType, getPlayerPermutationsFromSettings
+} from "../stats";
 
 export class SlpParser {
   private statsComputer: Stats;
@@ -62,7 +64,7 @@ export class SlpParser {
     this.settings = payload;
     const players = payload.players;
     this.settings.players = players.filter(player => player.type !== 3);
-    this.playerPermutations = getSinglesPlayerPermutationsFromSettings(this.settings);
+    this.playerPermutations = getPlayerPermutationsFromSettings(this.settings);
     this.statsComputer.setPlayerPermutations(this.playerPermutations);
 
     // Check to see if the file was created after the sheik fix so we know
@@ -83,12 +85,12 @@ export class SlpParser {
       const playersByIndex = _.keyBy(this.settings.players, 'playerIndex');
 
       switch (payload.internalCharacterId) {
-      case 0x7:
-        playersByIndex[playerIndex].characterId = 0x13; // Sheik
-        break;
-      case 0x13:
-        playersByIndex[playerIndex].characterId = 0x12; // Zelda
-        break;
+        case 0x7:
+          playersByIndex[playerIndex].characterId = 0x13; // Sheik
+          break;
+        case 0x13:
+          playersByIndex[playerIndex].characterId = 0x12; // Zelda
+          break;
       }
     }
     this.settingsComplete = payload.frame > Frames.FIRST;
@@ -101,7 +103,6 @@ export class SlpParser {
     this.latestFrameIndex = payload.frame;
     _.set(frames, [payload.frame, 'players', payload.playerIndex, location], payload);
     _.set(frames, [payload.frame, 'frame'], payload.frame);
-
     this.statsComputer.addFrame(frames[payload.frame]);
   }
 }

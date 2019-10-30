@@ -8,7 +8,7 @@ import {
   SlpReadInput
 } from "./utils/slpReader";
 import { SlpParser } from './utils/slpParser';
-import { StockComputer, ComboComputer, ActionsComputer, ConversionComputer, InputComputer, Stats, FrameEntryType, FramesType, StatsType, getSinglesPlayerPermutationsFromSettings, generateOverallStats } from './stats';
+import { StockComputer, ComboComputer, ActionsComputer, ConversionComputer, InputComputer, Stats, FrameEntryType, FramesType, StatsType, getPlayerPermutationsFromSettings, generateOverallStats } from './stats';
 
 /**
  * Slippi Game class that wraps a file
@@ -66,23 +66,23 @@ export class SlippiGame {
       }
 
       switch (command) {
-      case Command.GAME_START:
-        payload = payload as GameStartType;
-        this.parser.handleGameStart(payload);
-        break;
-      case Command.POST_FRAME_UPDATE:
-        payload = payload as PostFrameUpdateType;
-        this.parser.handlePostFrameUpdate(payload);
-        this.parser.handleFrameUpdate(command, payload);
-        break;
-      case Command.PRE_FRAME_UPDATE:
-        payload = payload as PreFrameUpdateType;
-        this.parser.handleFrameUpdate(command, payload);
-        break;
-      case Command.GAME_END:
-        payload = payload as GameEndType;
-        this.parser.handleGameEnd(payload);
-        break;
+        case Command.GAME_START:
+          payload = payload as GameStartType;
+          this.parser.handleGameStart(payload);
+          break;
+        case Command.POST_FRAME_UPDATE:
+          payload = payload as PostFrameUpdateType;
+          this.parser.handlePostFrameUpdate(payload);
+          this.parser.handleFrameUpdate(command, payload);
+          break;
+        case Command.PRE_FRAME_UPDATE:
+          payload = payload as PreFrameUpdateType;
+          this.parser.handleFrameUpdate(command, payload);
+          break;
+        case Command.GAME_END:
+          payload = payload as GameEndType;
+          this.parser.handleGameEnd(payload);
+          break;
       }
       return settingsOnly && this.parser.getSettings() !== null;
     }, this.readPosition);
@@ -131,7 +131,7 @@ export class SlippiGame {
     const inputs = this.inputComputer.fetch();
     const stocks = this.stockComputer.fetch();
     const conversions = this.conversionComputer.fetch();
-    const indices = getSinglesPlayerPermutationsFromSettings(this.parser.getSettings());
+    const indices = getPlayerPermutationsFromSettings(this.parser.getSettings());
     const playableFrames = this.parser.getPlayableFrameCount();
     const overall = generateOverallStats(indices, inputs, stocks, conversions, playableFrames);
 

@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import { PostFrameUpdateType } from "../utils/slpReader";
-import { FrameEntryType, FramesType, MoveLandedType, ComboType, PlayerIndexedType } from "./common";
+import { FrameEntryType, FramesType, MoveLandedType, ComboType, PlayerIndexedType, SELF_DESTRUCT } from "./common";
 import {
   isDamaged, isGrabbed, calcDamageTaken, isTeching, didLoseStock,
   Timers, isDown, isDead
@@ -11,6 +11,7 @@ interface ComboState {
   combo: ComboType | null;
   move: MoveLandedType | null;
   resetCounter: number;
+  lastAttacker: number;
   lastHitAnimation: number | null;
 }
 
@@ -26,6 +27,7 @@ export class ComboComputer implements StatComputer<ComboType[]> {
         combo: null,
         move: null,
         resetCounter: 0,
+        lastAttacker: -1,
         lastHitAnimation: null,
       };
       this.state.set(indices, playerState);
@@ -46,22 +48,19 @@ export class ComboComputer implements StatComputer<ComboType[]> {
 }
 
 function handleComboCompute(frames: FramesType, state: ComboState, indices: PlayerIndexedType, frame: FrameEntryType, combos: ComboType[]): void {
-  const playerFrame: PostFrameUpdateType = frame.players[indices.playerIndex].post;
+  if (frame.players[indices.playerIndex] === undefined) {
+    return;
+  }
+  const defenderFrame: PostFrameUpdateType = frame.players[indices.playerIndex].post;
   // FIXME: use type PostFrameUpdateType instead of any
   // This is because the default value {} should not be casted as a type of PostFrameUpdateType
-  const prevPlayerFrame: any = _.get(
-    frames, [playerFrame.frame - 1, 'players', indices.playerIndex, 'post'], {}
-  );
-  const opponentFrame: PostFrameUpdateType = frame.players[indices.opponentIndex].post;
-  // FIXME: use type PostFrameUpdateType instead of any
-  // This is because the default value {} should not be casted as a type of PostFrameUpdateType
-  const prevOpponentFrame: any = _.get(
-    frames, [playerFrame.frame - 1, 'players', indices.opponentIndex, 'post'], {}
+  const prevDefenderFrame: any = _.get(
+    frames, [defenderFrame.frame - 1, 'players', indices.playerIndex, 'post'], {}
   );
 
-  const opntIsDamaged = isDamaged(opponentFrame.actionStateId);
-  const opntIsGrabbed = isGrabbed(opponentFrame.actionStateId);
-  const opntDamageTaken = calcDamageTaken(opponentFrame, prevOpponentFrame);
+  const opntIsDamaged = isDamaged(defenderFrame.actionStateId);
+  const opntIsGrabbed = isGrabbed(defenderFrame.actionStateId);
+  const opntDamageTaken = calcDamageTaken(defenderFrame, prevDefenderFrame);
 
   // Keep track of whether actionState changes after a hit. Used to compute move count
   // When purely using action state there was a bug where if you did two of the same
@@ -69,12 +68,29 @@ function handleComboCompute(frames: FramesType, state: ComboState, indices: Play
   // the actionStateCounter at this point which counts the number of frames since
   // an animation started. Should be more robust, for old files it should always be
   // null and null < null = false
-  const actionChangedSinceHit = playerFrame.actionStateId !== state.lastHitAnimation;
-  const actionCounter = playerFrame.actionStateCounter;
-  const prevActionCounter = prevPlayerFrame.actionStateCounter;
-  const actionFrameCounterReset = actionCounter < prevActionCounter;
-  if (actionChangedSinceHit || actionFrameCounterReset) {
-    state.lastHitAnimation = null;
+  const lastHitBy = defenderFrame.lastHitBy;
+  if (state.lastAttacker !== -1) {
+    // If the last attacker is still alive and it's the same as last frame, check if
+    // the animation ended so we can stop tracking it.
+    if (frame.players[state.lastAttacker] !== undefined && lastHitBy === state.lastAttacker) {
+      var attackerFrame: PostFrameUpdateType = frame.players[lastHitBy].post;
+      const prevAttackerFrame: any = _.get(
+        frames, [attackerFrame.frame - 1, 'players', state.lastAttacker, 'post'], {}
+      );
+
+      const actionChangedSinceHit = attackerFrame.actionStateId !== state.lastHitAnimation;
+      const actionCounter = attackerFrame.actionStateCounter;
+      const prevActionCounter = prevAttackerFrame.actionStateCounter;
+      const actionFrameCounterReset = actionCounter < prevActionCounter;
+      if (actionChangedSinceHit || actionFrameCounterReset) {
+        state.lastAttacker = -1;
+        state.lastHitAnimation = null;
+      }
+    } else {
+      // If the attacker died or changed, reset the animation counter.
+      state.lastAttacker = -1;
+      state.lastHitAnimation = null;
+    }
   }
 
   // If opponent took damage and was put in some kind of stun this frame, either
@@ -82,12 +98,12 @@ function handleComboCompute(frames: FramesType, state: ComboState, indices: Play
   if (opntIsDamaged || opntIsGrabbed) {
     if (!state.combo) {
       state.combo = {
-        playerIndex: indices.playerIndex,
-        opponentIndex: indices.opponentIndex,
-        startFrame: playerFrame.frame,
+        playerIndex: lastHitBy,
+        opponentIndex: indices.playerIndex,
+        startFrame: defenderFrame.frame,
         endFrame: null,
-        startPercent: prevOpponentFrame.percent || 0,
-        currentPercent: opponentFrame.percent || 0,
+        startPercent: prevDefenderFrame.percent || 0,
+        currentPercent: defenderFrame.percent || 0,
         endPercent: null,
         moves: [],
         didKill: false,
@@ -97,27 +113,43 @@ function handleComboCompute(frames: FramesType, state: ComboState, indices: Play
     }
 
     if (opntDamageTaken) {
-      // If animation of last hit has been cleared that means this is a new move. This
-      // prevents counting multiple hits from the same move such as fox's drill
-      if (!state.lastHitAnimation) {
-        state.move = {
-          frame: playerFrame.frame,
-          moveId: playerFrame.lastAttackLanded,
-          hitCount: 0,
-          damage: 0,
-        };
+      // If the attacker died since we were hit, just increment the damage.
+      // Otherwise, try to track the animation.
+      if (frame.players[lastHitBy] !== undefined) {
+        var attackerFrame: PostFrameUpdateType = frame.players[lastHitBy].post;
+        const prevAttackerFrame: any = _.get(
+          frames, [attackerFrame.frame - 1, 'players', lastHitBy, 'post'], {}
+        );
 
-        state.combo.moves.push(state.move);
+        // If the defender got grabbed first hit after respawning, lastHitBy will be
+        // 6 (for SELF_DESTRUCT) until they get hit, so fix the combo's playerIndex accordingly.
+        if (state.combo.playerIndex == SELF_DESTRUCT) {
+          state.combo.playerIndex = lastHitBy;
+        }
+
+        // If animation of last hit has been cleared that means this is a new move. This
+        // prevents counting multiple hits from the same move such as fox's drill
+        if (!state.lastHitAnimation) {
+          state.move = {
+            frame: attackerFrame.frame,
+            moveId: attackerFrame.lastAttackLanded,
+            hitCount: 0,
+            damage: 0,
+          };
+
+          state.combo.moves.push(state.move);
+        }
+
+        // Store previous frame animation to consider the case of a trade, the previous
+        // frame should always be the move that actually connected... I hope
+        state.lastAttacker = attackerFrame.playerIndex;
+        state.lastHitAnimation = prevAttackerFrame.actionStateId;
       }
 
       if (state.move) {
         state.move.hitCount += 1;
         state.move.damage += opntDamageTaken;
       }
-
-      // Store previous frame animation to consider the case of a trade, the previous
-      // frame should always be the move that actually connected... I hope
-      state.lastHitAnimation = prevPlayerFrame.actionStateId;
     }
   }
 
@@ -127,14 +159,14 @@ function handleComboCompute(frames: FramesType, state: ComboState, indices: Play
     return;
   }
 
-  const opntIsTeching = isTeching(opponentFrame.actionStateId);
-  const opntIsDowned = isDown(opponentFrame.actionStateId);
-  const opntDidLoseStock = didLoseStock(opponentFrame, prevOpponentFrame);
-  const opntIsDying = isDead(opponentFrame.actionStateId);
+  const opntIsTeching = isTeching(defenderFrame.actionStateId);
+  const opntIsDowned = isDown(defenderFrame.actionStateId);
+  const opntDidLoseStock = didLoseStock(defenderFrame, prevDefenderFrame);
+  const opntIsDying = isDead(defenderFrame.actionStateId);
 
   // Update percent if opponent didn't lose stock
   if (!opntDidLoseStock) {
-    state.combo.currentPercent = opponentFrame.percent || 0;
+    state.combo.currentPercent = defenderFrame.percent || 0;
   }
 
   if (opntIsDamaged || opntIsGrabbed || opntIsTeching || opntIsDowned || opntIsDying) {
@@ -159,8 +191,8 @@ function handleComboCompute(frames: FramesType, state: ComboState, indices: Play
 
   // If combo should terminate, mark the end states and add it to list
   if (shouldTerminate) {
-    state.combo.endFrame = playerFrame.frame;
-    state.combo.endPercent = prevOpponentFrame.percent || 0;
+    state.combo.endFrame = defenderFrame.frame;
+    state.combo.endPercent = prevDefenderFrame.percent || 0;
 
     state.combo = null;
     state.move = null;

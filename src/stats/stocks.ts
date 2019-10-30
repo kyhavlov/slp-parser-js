@@ -14,6 +14,9 @@ export class StockComputer implements StatComputer<StockType[]> {
   private stocks = new Array<StockType>();
 
   public setPlayerPermutations(playerPermutations: PlayerIndexedType[]): void {
+    if (playerPermutations.length !== 2) {
+      return;
+    }
     this.playerPermutations = playerPermutations;
     this.playerPermutations.forEach((indices) => {
       const playerState: StockState = {

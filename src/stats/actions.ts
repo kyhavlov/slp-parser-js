@@ -16,6 +16,9 @@ export class ActionsComputer implements StatComputer<ActionCountsType[]> {
   private state = new Map<PlayerIndexedType, PlayerActionState>();
 
   public setPlayerPermutations(playerPermutations: PlayerIndexedType[]): void {
+    if (playerPermutations.length !== 2) {
+      return;
+    }
     this.playerPermutations = playerPermutations;
     this.playerPermutations.forEach((indices) => {
       const playerCounts: ActionCountsType = {

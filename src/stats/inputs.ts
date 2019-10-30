@@ -26,6 +26,9 @@ export class InputComputer implements StatComputer<PlayerInput[]> {
   private state = new Map<PlayerIndexedType, PlayerInput>();
 
   public setPlayerPermutations(playerPermutations: PlayerIndexedType[]): void {
+    if (playerPermutations.length !== 2) {
+      return;
+    }
     this.playerPermutations = playerPermutations;
     this.playerPermutations.forEach((indices) => {
       const playerState: PlayerInput = {

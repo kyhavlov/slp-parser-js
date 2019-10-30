@@ -30,6 +30,9 @@ export class ConversionComputer implements StatComputer<ConversionType[]> {
   }
 
   public setPlayerPermutations(playerPermutations: PlayerIndexedType[]): void {
+    if (playerPermutations.length !== 2) {
+      return;
+    }
     this.playerPermutations = playerPermutations;
     this.playerPermutations.forEach((indices) => {
       const playerState: PlayerConversionState = {

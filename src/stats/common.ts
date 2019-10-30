@@ -3,10 +3,12 @@ import { PostFrameUpdateType, GameStartType, PreFrameUpdateType } from "../utils
 
 export type FrameEntryType = {
   frame: number;
-  players: { [playerIndex: number]: {
-    pre: PreFrameUpdateType;
-    post: PostFrameUpdateType;
-  };};
+  players: {
+    [playerIndex: number]: {
+      pre: PreFrameUpdateType;
+      post: PostFrameUpdateType;
+    };
+  };
 };
 
 export type FramesType = {
@@ -147,18 +149,44 @@ export const Frames = {
   FIRST_PLAYABLE: -39,
 };
 
-export function getSinglesPlayerPermutationsFromSettings(settings: GameStartType): PlayerIndexedType[] {
-  if (!settings || settings.players.length !== 2) {
-    // Only return opponent indices for singles
-    return [];
+export const SELF_DESTRUCT = 6;
+
+export function getPlayerPermutationsFromSettings(settings: GameStartType): PlayerIndexedType[] {
+  if (!settings || settings.players.length === 2) {
+    return getSinglesPlayerPermutationsFromSettings(settings)
+  }
+  if (!settings || settings.players.length === 4) {
+    return getDoublesPlayerPermutationsFromSettings(settings);
   }
 
+  return [];
+}
+
+export function getSinglesPlayerPermutationsFromSettings(settings: GameStartType): PlayerIndexedType[] {
   return [
     {
       playerIndex: settings.players[0].playerIndex,
       opponentIndex: settings.players[1].playerIndex
     }, {
       playerIndex: settings.players[1].playerIndex,
+      opponentIndex: settings.players[0].playerIndex
+    }
+  ];
+}
+
+export function getDoublesPlayerPermutationsFromSettings(settings: GameStartType): PlayerIndexedType[] {
+  return [
+    {
+      playerIndex: settings.players[0].playerIndex,
+      opponentIndex: settings.players[3].playerIndex
+    }, {
+      playerIndex: settings.players[1].playerIndex,
+      opponentIndex: settings.players[2].playerIndex
+    }, {
+      playerIndex: settings.players[2].playerIndex,
+      opponentIndex: settings.players[1].playerIndex
+    }, {
+      playerIndex: settings.players[3].playerIndex,
       opponentIndex: settings.players[0].playerIndex
     }
   ];
